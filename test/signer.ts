@@ -190,7 +190,7 @@ describe('signer', () => {
 
         it('should set correct settings if accessibleAt provided', async () => {
           const authClientSign: sinon.SinonStub<
-            [string],
+            [string, string?],
             Promise<string>
           > = sandbox.stub(authClient, 'sign').resolves('signature');
           const accessibleAt = new Date(accessibleAtNumber);
@@ -463,10 +463,12 @@ describe('signer', () => {
       });
 
       describe('blobToSign', () => {
-        let authClientSign: sinon.SinonStub<
-          [blobToSign: string] & [data: string, endpoint?: string | undefined],
-          Promise<string>
-        >;
+        let authClientSign:
+          | sinon.SinonStub<[blobToSign: string], Promise<string>>
+          | sinon.SinonStub<
+              [data: string, endpoint?: string | undefined],
+              Promise<string>
+            >;
         beforeEach(() => {
           authClientSign = sandbox
             .stub<GoogleAuth | AuthClient, 'sign'>(authClient, 'sign')
