@@ -31,7 +31,7 @@ import {randomUUID} from 'crypto';
 // @ts-ignore
 import {getPackageJSON} from './package-json-helper.cjs';
 import {GCCL_GCS_CMD_KEY} from './nodejs-common/util';
-import {RetryOptions} from './storage';
+import {RETRYABLE_ERR_FN_DEFAULT, RetryOptions} from './storage';
 
 export interface StandardStorageQueryParams {
   alt?: 'json' | 'media';
@@ -113,7 +113,11 @@ export class StorageTransport {
     }
     this.providedUserAgent = options.userAgent;
     this.packageJson = getPackageJSON();
-    this.retryOptions = options.retryOptions;
+    this.retryOptions = {
+      ...options.retryOptions,
+      retryableErrorFn:
+        options.retryOptions?.retryableErrorFn || RETRYABLE_ERR_FN_DEFAULT,
+    };
     this.baseUrl = options.baseUrl;
     this.timeout = options.timeout;
     this.projectId = options.projectId;
@@ -153,6 +157,20 @@ export class StorageTransport {
       const requestPromise = this.authClient.request<T>({
         retryConfig: {
           retry: this.retryOptions.maxRetries,
+          statusCodesToRetry: [
+            [408, 408],
+            [429, 429],
+            [500, 500],
+            [502, 504],
+          ],
+          httpMethodsToRetry: [
+            'GET',
+            'HEAD',
+            'PUT',
+            'OPTIONS',
+            'DELETE',
+            'POST',
+          ],
           noResponseRetries: this.retryOptions.maxRetries,
           maxRetryDelay: this.retryOptions.maxRetryDelay,
           retryDelayMultiplier: this.retryOptions.retryDelayMultiplier,
@@ -163,6 +181,7 @@ export class StorageTransport {
         headers,
         url: this.#buildUrl(reqOpts.url?.toString(), reqOpts.queryParameters),
         timeout: this.timeout,
+        validateStatus: status => status >= 200 && status < 300,
       });
 
       return callback

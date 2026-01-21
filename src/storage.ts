@@ -303,6 +303,21 @@ const IDEMPOTENCY_STRATEGY_DEFAULT = IdempotencyStrategy.RetryConditional;
  * @return {boolean} True if the API request should be retried, false otherwise.
  */
 export const RETRYABLE_ERR_FN_DEFAULT = function (err?: GaxiosError) {
+  if (!err || !err.config) return false;
+
+  const method = (err.config.method || 'GET').toUpperCase();
+  const params = err.config.params || {};
+
+  const hasPrecondition = !!(
+    params.ifGenerationMatch !== undefined ||
+    params.ifMetagenerationMatch !== undefined ||
+    params.ifSourceGenerationMatch !== undefined
+  );
+
+  const isIdempotent =
+    ['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method) || !!hasPrecondition;
+  if (!isIdempotent) return false;
+
   const isConnectionProblem = (reason: string) => {
     return (
       reason.includes('eai_again') || // DNS lookup error
