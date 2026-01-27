@@ -30,8 +30,8 @@ const storage = new Storage();
 const cwd = path.join(__dirname, '..');
 const bucketName = generateName();
 const bucket = storage.bucket(bucketName);
-const hnsBucketName = generateName();
-const hnsBucket = storage.bucket(hnsBucketName);
+const softDeleteBucketName = generateName();
+const softDeleteBucket = storage.bucket(softDeleteBucketName);
 const objectRetentionBucketName = generateName();
 const objectRetentionBucket = storage.bucket(objectRetentionBucketName);
 const fileContents = 'these-are-my-contents';
@@ -235,6 +235,25 @@ describe('file', () => {
     );
     const [exists] = await bucket.file(movedFileName).exists();
     assert.strictEqual(exists, true);
+  });
+
+  it('should atomically move a file', async () => {
+    const movedFileName = 'test1.txt';
+    const file = bucket.file(fileName);
+    await file.save(fileName);
+    const output = execSync(
+      `node moveFileAtomic.js ${bucketName} ${fileName} ${movedFileName} ${doesNotExistPrecondition}`
+    );
+    assert.include(
+      output,
+      `gs://${bucketName}/${fileName} moved to gs://${bucketName}/${movedFileName}`
+    );
+    const [[destExists], [sourceExists]] = await Promise.all([
+      bucket.file(movedFileName).exists(),
+      bucket.file(fileName).exists(),
+    ]);
+    assert.strictEqual(destExists, true);
+    assert.strictEqual(sourceExists, false);
   });
 
   it('should copy a file', async () => {
@@ -600,29 +619,51 @@ describe('file', () => {
     });
   });
 
-  describe('HNS Bucket Move Object', () => {
+  describe('Object Soft Delete', () => {
+    let generation;
     before(async () => {
-      await storage.createBucket(hnsBucketName, {
-        hierarchicalNamespace: {enabled: true},
-        iamConfiguration: {
-          uniformBucketLevelAccess: {
-            enabled: true,
-          },
+      await storage.createBucket(softDeleteBucketName, {
+        softDeletePolicy: {
+          retentionDurationSeconds: 604800,
         },
       });
+      const file = softDeleteBucket.file(fileName);
+      await file.save(fileName);
+      const [metadata] = await softDeleteBucket.file(fileName).getMetadata();
+      generation = metadata.generation;
+      await file.delete();
     });
 
-    it('should move a file', async () => {
-      const file = hnsBucket.file(fileName);
-      await file.save(fileName);
-      const output = execSync(
-        `node moveFileAtomic.js ${hnsBucketName} ${fileName} ${movedFileName} ${doesNotExistPrecondition}`
+    after(async () => {
+      await softDeleteBucket.deleteFiles();
+      await softDeleteBucket.delete();
+    });
+
+    it('should list soft deleted objects', async () => {
+      const output = await execSync(
+        `node listSoftDeletedObjects.js ${softDeleteBucketName}`
       );
-      assert.include(
+      assert.match(output, /Files:/);
+      assert.match(output, new RegExp(fileName));
+    });
+
+    it('should list soft deleted object versions', async () => {
+      const output = await execSync(
+        `node listSoftDeletedObjectVersions.js ${softDeleteBucketName} ${fileName}`
+      );
+      assert.match(output, /Files:/);
+      assert.match(
         output,
-        `gs://${hnsBucketName}/${fileName} moved to gs://${hnsBucketName}/${movedFileName}`
+        new RegExp(`Name: ${fileName}, Generation: ${generation}`)
       );
-      const [exists] = await hnsBucket.file(movedFileName).exists();
+    });
+
+    it('should restore soft deleted object', async () => {
+      const output = await execSync(
+        `node restoreSoftDeletedObject.js ${softDeleteBucketName} ${fileName} ${generation}`
+      );
+      assert.include(output, `Soft deleted object ${fileName} was restored`);
+      const [exists] = await softDeleteBucket.file(fileName).exists();
       assert.strictEqual(exists, true);
     });
   });

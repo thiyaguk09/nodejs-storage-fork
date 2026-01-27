@@ -4,6 +4,29 @@
 
 [1]: https://www.npmjs.com/package/@google-cloud/storage?activeTab=versions
 
+## [7.18.0](https://github.com/googleapis/nodejs-storage/compare/v7.17.3...v7.18.0) (2025-11-28)
+
+
+### Features
+
+* **listBuckets:** Add support for returning partial success ([#2678](https://github.com/googleapis/nodejs-storage/issues/2678)) ([c7004da](https://github.com/googleapis/nodejs-storage/commit/c7004daae0b506eeefc5f4f241d9e3df3589b0e8))
+
+## [7.17.3](https://github.com/googleapis/nodejs-storage/compare/v7.17.2...v7.17.3) (2025-11-03)
+
+
+### Bug Fixes
+
+* :bug: fix the issue 2667, do not mutate object given to options … ([#2668](https://github.com/googleapis/nodejs-storage/issues/2668)) ([8a9f259](https://github.com/googleapis/nodejs-storage/commit/8a9f25968a08dc5cdaeb056054104db738fe651b))
+* Revert implement path containment to prevent traversal attacks ([254b6b2](https://github.com/googleapis/nodejs-storage/commit/254b6b2f9e79ce2e572f87694998538c9b1371c1))
+
+## [7.17.2](https://github.com/googleapis/nodejs-storage/compare/v7.17.1...v7.17.2) (2025-10-06)
+
+
+### Bug Fixes
+
+* Common Service: should retry a request failed ([#2652](https://github.com/googleapis/nodejs-storage/issues/2652)) ([b38b5d2](https://github.com/googleapis/nodejs-storage/commit/b38b5d221f2cb72658c1eb4a726315ab395a542c))
+* Implement path containment to prevent traversal attacks ([#2654](https://github.com/googleapis/nodejs-storage/issues/2654)) ([08d7abf](https://github.com/googleapis/nodejs-storage/commit/08d7abf32dd365b24ce34c66174be06c30bfce8f))
+
 ## [7.17.1](https://github.com/googleapis/nodejs-storage/compare/v7.17.0...v7.17.1) (2025-08-27)
 
 
