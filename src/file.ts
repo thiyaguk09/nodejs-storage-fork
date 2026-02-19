@@ -469,6 +469,12 @@ export interface RestoreOptions extends PreconditionOptions {
   projection?: 'full' | 'noAcl';
 }
 
+export interface ContextValue {
+  value: string | null;
+  readonly createTime?: string;
+  readonly updateTime?: string;
+}
+
 export interface FileMetadata extends BaseMetadata {
   acl?: AclMetadata[] | null;
   bucket?: string;
@@ -482,6 +488,11 @@ export interface FileMetadata extends BaseMetadata {
   customerEncryption?: {
     encryptionAlgorithm?: string;
     keySha256?: string;
+  };
+  contexts?: {
+    custom: {
+      [key: string]: ContextValue;
+    } | null;
   };
   customTime?: string;
   eventBasedHold?: boolean | null;
