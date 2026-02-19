@@ -32,6 +32,7 @@ import {
   DownloadManyFilesOptions,
 } from '../src/index.js';
 import assert from 'assert';
+import {describe, it, beforeEach, before, afterEach, after} from 'mocha';
 import * as path from 'path';
 import {GaxiosOptions, GaxiosResponse} from 'gaxios';
 import {GCCL_GCS_CMD_KEY} from '../src/nodejs-common/util.js';
@@ -353,7 +354,7 @@ describe('Transfer Manager', () => {
     });
 
     it('skips files that attempt path traversal via dot-segments (../) and returns them in skippedFiles', async () => {
-      const prefix = 'safe-directory';
+      const prefix = 'download-directory';
       const maliciousFilename = '../../etc/passwd';
       const validFilename = 'valid.txt';
 
@@ -462,7 +463,7 @@ describe('Transfer Manager', () => {
       assert.strictEqual(results.skippedFiles.length, 1);
     });
 
-    it('should skips files containing Windows volume separators (:) to prevent drive-injection attacks', async () => {
+    it('should skip files containing Windows volume separators (:) to prevent drive-injection attacks', async () => {
       const prefix = 'C:\\local\\target';
       const maliciousFile = new File(bucket, 'C:\\system\\win32');
 
@@ -479,18 +480,25 @@ describe('Transfer Manager', () => {
     });
 
     it('should account for every input file (Parity Check)', async () => {
-      const prefix = './downloads';
+      const prefix = '/local/target';
       const fileNames = [
-        'valid1.txt',
-        '../../traversal.txt', // Should be skipped
-        '/absolute/blocked.txt',
-        'c:/absolute/blocked.txt', // Should be skipped
-        'absolute/../valid2.txt',
+        'data/file.txt', // Normal (Download)
+        'data/../sibling.txt', // Internal Traversal (Download)
+        '../escape.txt', // External Traversal (Skip - Path Traversal '..')
+        '/etc/passwd', // Leading Slash (Download)
+        '/local/usr/a.txt', // Path matches prefix (Download)
+        'dir/./file.txt', // Dot segment (Download)
+        'windows\\file.txt', // Windows separator (Download)
+        'data\\..\\sibling.txt', // Windows traversal (Download)
+        '..\\escape.txt', // Windows escape (Skip - Path Traversal '..')
+        'C:\\system\\win32', // Windows Drive (Skip - Illegal Char ':')
+        'C:\\local\\target\\a.txt', // Windows Absolute (Skip - Illegal Char ':')
       ];
 
       const files = fileNames.map(name => bucket.file(name));
 
       sandbox.stub(File.prototype, 'download').resolves([Buffer.alloc(0)]);
+      sandbox.stub(fsp, 'mkdir').resolves();
 
       const result = (await transferManager.downloadManyFiles(files, {
         prefix,
@@ -505,8 +513,30 @@ describe('Transfer Manager', () => {
         `Parity Failure: Processed ${totalProcessed} files but input had ${fileNames.length}`
       );
 
-      assert.strictEqual(result.responses.length, 3);
-      assert.strictEqual(result.skippedFiles.length, 2);
+      const expectedDownloads = 7;
+      const expectedSkips = 4;
+
+      assert.strictEqual(
+        result.responses.length,
+        expectedDownloads,
+        `Expected ${expectedDownloads} downloads but got ${result.responses.length}`
+      );
+
+      assert.strictEqual(
+        result.skippedFiles.length,
+        expectedSkips,
+        `Expected ${expectedSkips} skips but got ${result.skippedFiles.length}`
+      );
+
+      const traversalSkips = result.skippedFiles.filter(
+        f => f.reason === SkipReason.PATH_TRAVERSAL
+      );
+      assert.strictEqual(traversalSkips.length, 2);
+
+      const illegalCharSkips = result.skippedFiles.filter(
+        f => f.reason === SkipReason.ILLEGAL_CHARACTER
+      );
+      assert.strictEqual(illegalCharSkips.length, 2);
     });
   });
 

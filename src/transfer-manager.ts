@@ -621,13 +621,12 @@ export class TransferManager {
       const resolvedPath = path.resolve(dest || file.name);
       const relativePath = path.relative(baseDestination, resolvedPath);
       const isOutside = relativePath.startsWith('..');
-      const isAbsoluteAttempt = path.isAbsolute(relativePath);
+      const hasIllegalChars = (dest || file.name).includes(':');
 
-      if (isOutside || isAbsoluteAttempt || file.name.includes(':')) {
+      if (isOutside || hasIllegalChars) {
         let reason: SkipReason = SkipReason.DOWNLOAD_ERROR;
         if (isOutside) reason = SkipReason.PATH_TRAVERSAL;
-        else if (file.name.includes(':')) reason = SkipReason.ILLEGAL_CHARACTER;
-        else if (isAbsoluteAttempt) reason = SkipReason.ABSOLUTE_PATH_BLOCKED;
+        else if (hasIllegalChars) reason = SkipReason.ILLEGAL_CHARACTER;
 
         skippedFiles.push({
           fileName: file.name,
