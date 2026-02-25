@@ -3038,6 +3038,42 @@ describe('storage', function () {
             const [metadata] = await file.getMetadata();
             assert.ok(metadata.kmsKeyName || metadata.customerEncryption);
           });
+
+          it('should retain defaultKmsKeyName when updating enforcement settings independently', async () => {
+            await bucket.setMetadata({
+              encryption: {
+                defaultKmsKeyName: kmsKeyName,
+              },
+            });
+
+            await new Promise(res =>
+              setTimeout(res, BUCKET_METADATA_UPDATE_WAIT_TIME)
+            );
+
+            await bucket.setMetadata({
+              encryption: {
+                googleManagedEncryptionEnforcementConfig: {
+                  restrictionMode: 'FullyRestricted',
+                },
+              },
+            });
+
+            await new Promise(res =>
+              setTimeout(res, BUCKET_METADATA_UPDATE_WAIT_TIME)
+            );
+
+            const [metadata] = await bucket.getMetadata();
+            assert.strictEqual(
+              metadata.encryption?.defaultKmsKeyName,
+              kmsKeyName
+            );
+
+            assert.strictEqual(
+              metadata.encryption?.googleManagedEncryptionEnforcementConfig
+                ?.restrictionMode,
+              'FullyRestricted'
+            );
+          });
         });
       });
     });
