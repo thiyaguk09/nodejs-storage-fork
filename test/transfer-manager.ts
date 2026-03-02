@@ -40,9 +40,8 @@ import {AuthClient, GoogleAuth} from 'google-auth-library';
 import {tmpdir} from 'os';
 import fs from 'fs';
 import {promises as fsp, Stats} from 'fs';
-
 import * as sinon from 'sinon';
-import {DownloadManyFilesResult, SkipReason} from '../src/file.js';
+import {DownloadResponseWithStatus, SkipReason} from '../src/file.js';
 
 describe('Transfer Manager', () => {
   const BUCKET_NAME = 'test-bucket';
@@ -366,21 +365,18 @@ describe('Transfer Manager', () => {
         .resolves([Buffer.alloc(0)]);
       const maliciousDownloadStub = sandbox.stub(maliciousFile, 'download');
 
-      const result = await transferManager.downloadManyFiles(
+      const result = (await transferManager.downloadManyFiles(
         [maliciousFile, validFile],
         {prefix}
-      );
+      )) as DownloadResponseWithStatus[];
 
       assert.strictEqual(maliciousDownloadStub.called, false);
       assert.strictEqual(downloadStub.calledOnce, true);
 
-      const results = result as DownloadManyFilesResult;
-      assert.strictEqual(results.skippedFiles.length, 1);
-      assert.strictEqual(results.skippedFiles[0].fileName, maliciousFilename);
-      assert.strictEqual(
-        results.skippedFiles[0].reason,
-        SkipReason.PATH_TRAVERSAL
-      );
+      const skipped = result.find(r => r.fileName === maliciousFilename);
+      assert.ok(skipped);
+      assert.strictEqual(skipped!.skipped, true);
+      assert.strictEqual(skipped!.reason, SkipReason.PATH_TRAVERSAL);
     });
 
     it('allows files with relative segments that resolve within the target directory', async () => {
@@ -402,11 +398,13 @@ describe('Transfer Manager', () => {
       const file = new File(bucket, maliciousFilename);
       const downloadStub = sandbox.stub(file, 'download');
 
-      const result = await transferManager.downloadManyFiles([file]);
+      const result = (await transferManager.downloadManyFiles([
+        file,
+      ])) as DownloadResponseWithStatus[];
 
       assert.strictEqual(downloadStub.called, false);
-      const results = result as DownloadManyFilesResult;
-      assert.strictEqual(results.skippedFiles.length, 1);
+      assert.strictEqual(result[0].skipped, true);
+      assert.strictEqual(result[0].reason, SkipReason.PATH_TRAVERSAL);
     });
 
     it('jails absolute-looking paths with nested segments into the target directory', async () => {
@@ -419,14 +417,16 @@ describe('Transfer Manager', () => {
         .stub(file, 'download')
         .resolves([Buffer.alloc(0)]);
 
-      const result = await transferManager.downloadManyFiles([file], {prefix});
+      const result = (await transferManager.downloadManyFiles([file], {
+        prefix,
+      })) as DownloadResponseWithStatus[];
 
       assert.strictEqual(downloadStub.called, true);
       const options = downloadStub.firstCall.args[0] as DownloadOptions;
       assert.strictEqual(options.destination, expectedDestination);
 
-      const results = result as DownloadManyFilesResult;
-      assert.strictEqual(results.skippedFiles.length, 0);
+      assert.strictEqual(result.length, 1);
+      assert.strictEqual(result[0].skipped, false);
     });
 
     it('jails absolute-looking Unix paths (e.g. /etc/passwd) into the target directory instead of skipping', async () => {
@@ -439,11 +439,14 @@ describe('Transfer Manager', () => {
         .stub(file, 'download')
         .resolves([Buffer.alloc(0)]);
 
-      await transferManager.downloadManyFiles([file], {prefix});
+      const result = (await transferManager.downloadManyFiles([file], {
+        prefix,
+      })) as DownloadResponseWithStatus[];
 
       assert.strictEqual(downloadStub.calledOnce, true);
       const options = downloadStub.firstCall.args[0] as DownloadOptions;
       assert.strictEqual(options.destination, expectedDestination);
+      assert.strictEqual(result[0].skipped, false);
     });
 
     it('correctly handles stripPrefix and verifies the resulting path is still safe', async () => {
@@ -456,27 +459,30 @@ describe('Transfer Manager', () => {
 
       const downloadStub = sandbox.stub(file, 'download');
 
-      const result = await transferManager.downloadManyFiles([file], options);
+      const result = (await transferManager.downloadManyFiles(
+        [file],
+        options
+      )) as DownloadResponseWithStatus[];
 
       assert.strictEqual(downloadStub.called, false);
-      const results = result as DownloadManyFilesResult;
-      assert.strictEqual(results.skippedFiles.length, 1);
+      assert.strictEqual(result[0].skipped, true);
+      assert.strictEqual(result[0].reason, SkipReason.PATH_TRAVERSAL);
     });
 
     it('should skip files containing Windows volume separators (:) to prevent drive-injection attacks', async () => {
       const prefix = 'C:\\local\\target';
       const maliciousFile = new File(bucket, 'C:\\system\\win32');
 
-      const result = await transferManager.downloadManyFiles([maliciousFile], {
+      const result = (await transferManager.downloadManyFiles([maliciousFile], {
         prefix,
-      });
+      })) as DownloadResponseWithStatus[];
 
-      const results = result as DownloadManyFilesResult;
-      assert.strictEqual(results.skippedFiles.length, 1);
-      assert.strictEqual(
-        results.skippedFiles[0].reason,
-        SkipReason.ILLEGAL_CHARACTER
-      );
+      assert.strictEqual(result.length, 1);
+
+      const response = result[0];
+      assert.strictEqual(response.skipped, true);
+      assert.strictEqual(response.reason, SkipReason.ILLEGAL_CHARACTER);
+      assert.strictEqual(response.fileName, 'C:\\system\\win32');
     });
 
     it('should account for every input file (Parity Check)', async () => {
@@ -493,6 +499,8 @@ describe('Transfer Manager', () => {
         '..\\escape.txt', // Windows escape (Skip - Path Traversal '..')
         'C:\\system\\win32', // Windows Drive (Skip - Illegal Char ':')
         'C:\\local\\target\\a.txt', // Windows Absolute (Skip - Illegal Char ':')
+        '..temp.txt', // Leading dots in filename (Download - Not a traversal)
+        'test-2026:01:01.txt', // GCS Timestamps (Download - Colon is middle, not drive)
       ];
 
       const files = fileNames.map(name => bucket.file(name));
@@ -502,38 +510,38 @@ describe('Transfer Manager', () => {
 
       const result = (await transferManager.downloadManyFiles(files, {
         prefix,
-      })) as DownloadManyFilesResult;
-
-      const totalProcessed =
-        result.responses.length + result.skippedFiles.length;
+      })) as DownloadResponseWithStatus[];
 
       assert.strictEqual(
-        totalProcessed,
+        result.length,
         fileNames.length,
-        `Parity Failure: Processed ${totalProcessed} files but input had ${fileNames.length}`
+        `Parity Failure: Processed ${result.length} files but input had ${fileNames.length}`
       );
 
-      const expectedDownloads = 7;
+      const downloads = result.filter(r => !r.skipped);
+      const skips = result.filter(r => r.skipped);
+
+      const expectedDownloads = 9;
       const expectedSkips = 4;
 
       assert.strictEqual(
-        result.responses.length,
+        downloads.length,
         expectedDownloads,
-        `Expected ${expectedDownloads} downloads but got ${result.responses.length}`
+        `Expected ${expectedDownloads} downloads but got ${downloads.length}`
       );
 
       assert.strictEqual(
-        result.skippedFiles.length,
+        skips.length,
         expectedSkips,
-        `Expected ${expectedSkips} skips but got ${result.skippedFiles.length}`
+        `Expected ${expectedSkips} skips but got ${skips.length}`
       );
 
-      const traversalSkips = result.skippedFiles.filter(
+      const traversalSkips = skips.filter(
         f => f.reason === SkipReason.PATH_TRAVERSAL
       );
       assert.strictEqual(traversalSkips.length, 2);
 
-      const illegalCharSkips = result.skippedFiles.filter(
+      const illegalCharSkips = skips.filter(
         f => f.reason === SkipReason.ILLEGAL_CHARACTER
       );
       assert.strictEqual(illegalCharSkips.length, 2);

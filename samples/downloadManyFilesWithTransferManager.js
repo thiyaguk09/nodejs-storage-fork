@@ -48,25 +48,24 @@ function main(
   const transferManager = new TransferManager(storage.bucket(bucketName));
 
   async function downloadManyFilesWithTransferManager() {
-    // Downloads the files
-    const {skippedFiles} = await transferManager.downloadManyFiles([
+    // Downloads the files. The result is an array of DownloadResponses
+    // augmented with 'skipped' and 'reason' properties.
+    const results = await transferManager.downloadManyFiles([
       firstFileName,
       secondFileName,
     ]);
 
-    const skippedFileNames = new Set(skippedFiles.map(f => f.fileName));
-    for (const fileName of [firstFileName, secondFileName]) {
-      const isSkipped = skippedFileNames.has(fileName);
-      if (!isSkipped) {
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      // Each result is a DownloadResponse [Buffer]
+      // We check our custom properties to see if it was blocked by validation
+      const fileName = result.fileName || [firstFileName, secondFileName][i];
+      if (result.skipped) {
+        console.warn(`Skipped ${fileName}: ${result.reason}`);
+      } else {
         console.log(
           `gs://${bucketName}/${fileName} downloaded to ${fileName}.`
         );
-      }
-    }
-
-    if (skippedFiles.length > 0) {
-      for (const skipped of skippedFiles) {
-        console.warn(`Skipped ${skipped.fileName}: ${skipped.reason}`);
       }
     }
   }

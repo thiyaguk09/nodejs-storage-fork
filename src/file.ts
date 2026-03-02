@@ -396,24 +396,20 @@ export interface CopyCallback {
 
 export type DownloadResponse = [Buffer];
 
-export interface DownloadManyFilesResult {
-  responses: DownloadResponse[];
-  skippedFiles: SkippedFileInfo[];
-}
+export type DownloadResponseWithStatus = [Buffer] & {
+  skipped?: boolean;
+  reason?: SkipReason;
+  fileName?: string;
+  localPath?: string;
+  message?: string;
+  error?: Error;
+};
 
 export enum SkipReason {
   PATH_TRAVERSAL = 'PATH_TRAVERSAL',
   ILLEGAL_CHARACTER = 'ILLEGAL_CHARACTER',
   ALREADY_EXISTS = 'ALREADY_EXISTS',
   DOWNLOAD_ERROR = 'DOWNLOAD_ERROR',
-}
-
-export interface SkippedFileInfo {
-  fileName: string;
-  localPath: string;
-  reason: SkipReason;
-  message: string;
-  error?: Error;
 }
 
 export type DownloadCallback = (
