@@ -61,6 +61,7 @@ import {
   unicodeJSONStringify,
   formatAsUTCISO,
   PassThroughShim,
+  validateContexts,
 } from './util.js';
 import {CRC32C, CRC32CValidatorGenerator} from './crc32c.js';
 import {HashStreamValidator} from './hash-stream-validator.js';
@@ -381,6 +382,11 @@ export interface CopyOptions {
   destinationKmsKeyName?: string;
   metadata?: {
     [key: string]: string | boolean | number | null;
+  };
+  contexts?: {
+    custom: {
+      [key: string]: ContextValue;
+    } | null;
   };
   predefinedAcl?: string;
   token?: string;
@@ -1301,6 +1307,16 @@ class File extends ServiceObject<File, FileMetadata> {
       callback = optionsOrCallback;
     } else if (optionsOrCallback) {
       options = {...optionsOrCallback};
+    }
+
+    if (options.contexts) {
+      try {
+        validateContexts({contexts: options.contexts});
+      } catch (err) {
+        if (callback)
+          return (callback as CopyCallback)(err as Error, null, null);
+        return Promise.reject(err);
+      }
     }
 
     callback = callback || util.noop;
@@ -4134,6 +4150,13 @@ class File extends ServiceObject<File, FileMetadata> {
     const options =
       typeof optionsOrCallback === 'object' ? optionsOrCallback : {};
 
+    try {
+      validateContexts(options.metadata);
+    } catch (err) {
+      if (callback) return callback(err as Error);
+      return Promise.reject(err);
+    }
+
     let maxRetries = this.storage.retryOptions.maxRetries;
     if (
       !this.shouldRetryBasedOnPreconditionAndIdempotencyStrat(
@@ -4236,6 +4259,13 @@ class File extends ServiceObject<File, FileMetadata> {
       typeof optionsOrCallback === 'function'
         ? (optionsOrCallback as MetadataCallback<FileMetadata>)
         : cb;
+
+    try {
+      validateContexts(metadata);
+    } catch (err) {
+      if (cb) return cb(err as Error);
+      return Promise.reject(err);
+    }
 
     this.disableAutoRetryConditionallyIdempotent_(
       this.methods.setMetadata,
