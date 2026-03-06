@@ -280,7 +280,7 @@ export class PassThroughShim extends PassThrough {
  * interfere with GCS filter string syntax.
  *
  * @param {FileMetadata} [metadata] The metadata object to validate.
- * @returns {boolean} Returns `true` if valid, throws with error otherwise.
+ * @throws {Error} If a context key or value contains a double quote.
  */
 export function validateContexts(metadata?: FileMetadata) {
   const custom = metadata?.contexts?.custom;
