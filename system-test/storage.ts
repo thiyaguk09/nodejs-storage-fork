@@ -3556,7 +3556,7 @@ describe('storage', function () {
       const [metadata] = await file.getMetadata();
       assert.ok(metadata.contexts?.custom);
       assert.strictEqual(
-        metadata.contexts.custom['team-owner'].value,
+        metadata.contexts.custom['team-owner']?.value,
         'storage-team'
       );
       assert.ok(metadata.contexts.custom['team-owner'].createTime);
@@ -3570,13 +3570,12 @@ describe('storage', function () {
           },
         },
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await file.setMetadata(patchMetadata as any);
+      await file.setMetadata(patchMetadata);
 
       const [updatedMetadata] = await file.getMetadata();
       const finalCustom = updatedMetadata.contexts!.custom!;
-      assert.strictEqual(finalCustom['priority'].value, 'critical');
-      assert.strictEqual(finalCustom['env'].value, 'prod');
+      assert.strictEqual(finalCustom['priority']?.value, 'critical');
+      assert.strictEqual(finalCustom['env']?.value, 'prod');
       assert.strictEqual(finalCustom['team-owner'], undefined);
       assert.ok(finalCustom['priority'].updateTime);
     });
@@ -3613,8 +3612,7 @@ describe('storage', function () {
         contexts: {
           custom: null,
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      });
       const [metadata] = await file.getMetadata();
 
       assert.strictEqual(metadata.contexts?.custom, undefined);
