@@ -497,7 +497,7 @@ export interface FileMetadata extends BaseMetadata {
   };
   contexts?: {
     custom: {
-      [key: string]: ContextValue | null;
+      [key: string]: ContextValue;
     } | null;
   };
   customTime?: string;
@@ -1313,9 +1313,8 @@ class File extends ServiceObject<File, FileMetadata> {
       try {
         validateContexts({contexts: options.contexts});
       } catch (err) {
-        if (callback) {
+        if (callback)
           return (callback as CopyCallback)(err as Error, null, null);
-        }
         return Promise.reject(err);
       }
     }
