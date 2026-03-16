@@ -176,16 +176,39 @@ it('should get bucket encryption enforcement configuration', async () => {
   assert.match(output, /Effective:/);
 });
 
-it('should remove all bucket encryption enforcement configuration', async () => {
+it('should update and then remove all bucket encryption enforcement configuration', async () => {
   const output = execSync(
-    `node removeAllBucketEncryptionEnforcementConfig.js ${bucketName}`
+    `node updateBucketEncryptionEnforcementConfig.js ${bucketName}`
+  );
+
+  assert.include(
+    output,
+    `Google-managed encryption enforcement set to FullyRestricted for ${bucketName}.`
   );
   assert.include(
     output,
-    `Encryption enforcement configuration removed from bucket ${bucketName}`
+    `All encryption enforcement configurations removed from bucket ${bucketName}.`
   );
-  await bucket.getMetadata();
-  assert.ok(!bucket.metadata.encryption);
+
+  const [metadata] = await bucket.getMetadata();
+
+  if (metadata.encryption) {
+    assert.strictEqual(metadata.encryption.defaultKmsKeyName, undefined);
+    assert.strictEqual(
+      metadata.encryption.googleManagedEncryptionEnforcementConfig,
+      undefined
+    );
+    assert.strictEqual(
+      metadata.encryption.customerSuppliedEncryptionEnforcementConfig,
+      undefined
+    );
+    assert.strictEqual(
+      metadata.encryption.customerManagedEncryptionEnforcementConfig,
+      undefined
+    );
+  } else {
+    assert.ok(!metadata.encryption);
+  }
 });
 
 it("should enable a bucket's uniform bucket-level access", async () => {
